@@ -1,0 +1,54 @@
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+python-multipart==0.0.20
+openai==1.106.1
+python-docx==1.2.0
+PyPDF2==3.0.1
+pydantic==2.11.7
+pydantic-settings==2.10.1
+python-dotenv==1.1.1
+aiofiles==24.1.0
+anyio>=4,<5
+pdfplumber==0.11.7
+pymupdf==1.26.4
+docx2python==3.5.0
+requests==2.32.3
+aiohttp==3.12.0
+Pillow==10.4.0
+asyncio-throttle==1.0.2
+duckduckgo-search==8.1.1
+beautifulsoup4==4.12.3
+playwright==1.51.0
+seleniumbase==4.33.3
+undetected-chromedriver==3.5.5
+mcp==1.13.1
+
+# 数据库和ORM
+SQLAlchemy==2.0.36
+alembic==1.14.0
+aiosqlite==0.20.0
+
+# Redis支持
+redis==5.2.1
+aioredis==2.0.1
+
+# MinIO支持
+minio==7.2.2
+
+# Qdrant向量数据库支持
+qdrant-client==1.12.1
+
+# 向量嵌入支持
+numpy==1.26.4
+tiktoken==0.8.0
+
+# 异步任务队列
+celery==5.4.0
+
+# 日志和监控
+loguru==0.7.3
+
+# 工具库
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+httpx==0.28.1
