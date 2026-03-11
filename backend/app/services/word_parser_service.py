@@ -4,7 +4,7 @@ import re
 import json
 import asyncio
 import aiofiles
-from typing import Optional, List, Dict, Any, AsyncGenerator, Tuple
+from typing import Optional, List, Dict, Any, AsyncGenerator, Tuple, Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -186,7 +186,7 @@ class WordParseService:
             is_bold = first_run.font.bold
             
             # 判断是否为标题格式
-            if font_size and font_size Pt(14):  # 四号及以上
+            if font_size and font_size >= Pt(14):  # 四号及以上
                 if is_bold:
                     # 进一步分析位置和格式
                     return 1
