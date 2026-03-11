@@ -7,7 +7,7 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 120000, // 调整为60秒
+  timeout: 120000,
 });
 
 // 响应拦截器
@@ -57,102 +57,195 @@ export interface ChapterContentRequest {
   project_overview: string;
 }
 
+// 分片上传配置
+const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
+const CHUNKED_THRESHOLD = 10 * 1024 * 1024; // 10MB
+const MAX_CONCURRENT = 3;
+
 // 配置相关API
 export const configApi = {
-  // 保存配置
   saveConfig: (config: ConfigData) =>
     api.post('/api/config/save', config),
-
-  // 加载配置
   loadConfig: () =>
     api.get('/api/config/load'),
-
-  // 获取可用模型
   getModels: (config: ConfigData) =>
     api.post('/api/config/models', config),
 };
 
 // 文档相关API
 export const documentApi = {
-  // 上传文件
   uploadFile: (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     return api.post<FileUploadResponse>('/api/document/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
 
-
-  // 流式分析文档
   analyzeDocumentStream: (data: AnalysisRequest) =>
     fetch(`${API_BASE_URL}/api/document/analyze-stream`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }),
 
-  // 导出Word文档
   exportWord: (data: any) =>
     fetch(`${API_BASE_URL}/api/document/export-word`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }),
+};
+
+// 分片上传API
+export const chunkedUploadApi = {
+  // 初始化上传
+  initUpload: (filename: string, fileSize: number, contentType: string = 'application/octet-stream') =>
+    api.post('/api/upload/chunked/init', {
+      filename,
+      file_size: fileSize,
+      content_type: contentType,
+    }),
+
+  // 上传分片
+  uploadPart: (uploadId: string, partNumber: number, chunk: Blob) => {
+    const formData = new FormData();
+    formData.append('file', chunk);
+    return api.post(`/api/upload/chunked/part/file?upload_id=${uploadId}&part_number=${partNumber}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  // 完成上传
+  completeUpload: (uploadId: string) =>
+    api.post('/api/upload/chunked/complete', { upload_id: uploadId }),
+
+  // 获取上传状态
+  getUploadStatus: (uploadId: string) =>
+    api.get(`/api/upload/chunked/status/${uploadId}`),
+
+  // 取消上传
+  cancelUpload: (uploadId: string) =>
+    api.delete(`/api/upload/chunked/${uploadId}`),
+};
+
+// 智能上传：自动选择普通或分片上传
+export const smartUpload = {
+  upload: async (
+    file: File,
+    onProgress?: (progress: number, uploaded: number, total: number) => void
+  ): Promise<{ fileUrl?: string; fileContent?: string }> => {
+    // 小文件直接上传
+    if (file.size <= CHUNKED_THRESHOLD) {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await api.post<any>('/api/document/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return { fileContent: response.data.file_content };
+    }
+
+    // 大文件分片上传
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    
+    // 初始化上传
+    const initResponse = await chunkedUploadApi.initUpload(file.name, file.size, file.type);
+    const { upload_id, chunk_size } = initResponse.data.data;
+
+    // 获取已上传的分片（断点续传）
+    let statusResponse;
+    try {
+      statusResponse = await chunkedUploadApi.getUploadStatus(upload_id);
+      var uploadedParts = statusResponse.data.data.uploaded_chunks || [];
+    } catch {
+      uploadedParts = [];
+    }
+
+    // 上传剩余分片
+    const uploadPromises: Promise<any>[] = [];
+    let uploadedCount = uploadedParts.length;
+
+    for (let i = 0; i < totalChunks; i++) {
+      if (uploadedParts.includes(i + 1)) {
+        continue;
+      }
+
+      const start = i * chunk_size;
+      const end = Math.min(start + chunk_size, file.size);
+      const chunk = file.slice(start, end);
+
+      const promise = chunkedUploadApi
+        .uploadPart(upload_id, i + 1, chunk)
+        .then(() => {
+          uploadedCount++;
+          if (onProgress) {
+            onProgress((uploadedCount / totalChunks) * 100, uploadedCount, totalChunks);
+          }
+        })
+        .catch((error) => {
+          console.error(`分片 ${i + 1} 上传失败:`, error);
+          throw error;
+        });
+
+      uploadPromises.push(promise);
+
+      // 控制并发数
+      if (uploadPromises.length >= MAX_CONCURRENT || i === totalChunks - 1) {
+        await Promise.all(uploadPromises);
+        uploadPromises.length = 0;
+      }
+    }
+
+    // 完成上传
+    const completeResponse = await chunkedUploadApi.completeUpload(upload_id);
+    const { file_url, skip_upload } = completeResponse.data.data;
+
+    if (skip_upload) {
+      // 秒传成功，需要获取文件内容
+      return { fileUrl: file_url };
+    }
+
+    // 如果是本地文件，需要处理文本提取
+    if (!file_url.startsWith('http')) {
+      return { fileUrl: file_url };
+    }
+
+    return { fileUrl: file_url };
+  },
 };
 
 // 目录相关API
 export const outlineApi = {
-  // 生成目录
   generateOutline: (data: OutlineRequest) =>
     api.post('/api/outline/generate', data),
-
-  // 流式生成目录
   generateOutlineStream: (data: OutlineRequest) =>
     fetch(`${API_BASE_URL}/api/outline/generate-stream`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }),
-
 };
 
 // 内容相关API
 export const contentApi = {
-  // 生成单章节内容
   generateChapterContent: (data: ChapterContentRequest) =>
     api.post('/api/content/generate-chapter', data),
-
-  // 流式生成单章节内容
   generateChapterContentStream: (data: ChapterContentRequest) =>
     fetch(`${API_BASE_URL}/api/content/generate-chapter-stream`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }),
 };
 
 // 方案扩写相关API
 export const expandApi = {
-  // 上传方案扩写文件
   uploadExpandFile: (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     return api.post<FileUploadResponse>('/api/expand/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      timeout: 300000, // 文件上传专用超时设置：5分钟
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000,
     });
   },
 };

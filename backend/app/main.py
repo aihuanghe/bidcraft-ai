@@ -9,7 +9,7 @@ import starlette.middleware.cors
 
 from .config import settings
 from .routers import config, document, outline, content, search, expand
-from .routers import projects, materials, storage
+from .routers import projects, materials, storage, upload
 
 # 创建FastAPI应用实例
 app = FastAPI(
@@ -39,6 +39,7 @@ app.include_router(expand.router)
 app.include_router(projects.router)
 app.include_router(materials.router)
 app.include_router(storage.router)
+app.include_router(upload.router)
 
 # 健康检查端点
 @app.get("/health")

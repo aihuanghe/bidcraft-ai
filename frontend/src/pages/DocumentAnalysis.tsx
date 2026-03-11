@@ -3,7 +3,7 @@
  */
 import React, { useState, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { documentApi } from '../services/api';
+import { documentApi, smartUpload } from '../services/api';
 import { CloudArrowUpIcon, DocumentIcon } from '@heroicons/react/24/outline';
 
 interface DocumentAnalysisProps {
@@ -101,13 +101,18 @@ const DocumentAnalysis: React.FC<DocumentAnalysisProps> = ({
       setUploading(true);
       setMessage(null);
 
-      const response = await documentApi.uploadFile(file);
-      
-      if (response.data.success && response.data.file_content) {
-        onFileUpload(response.data.file_content);
-        setMessage({ type: 'success', text: response.data.message });
-      } else {
-        setMessage({ type: 'error', text: response.data.message });
+      // 使用智能上传（自动选择普通或分片上传）
+      const result = await smartUpload.upload(file, (progress, uploaded, total) => {
+        // 可以在这里更新进度
+        console.log(`上传进度: ${Math.round(progress)}% (${uploaded}/${total})`);
+      });
+
+      if (result.fileContent) {
+        onFileUpload(result.fileContent);
+        setMessage({ type: 'success', text: '文件上传成功' });
+      } else if (result.fileUrl) {
+        // 大文件分片上传成功，但需要从URL获取内容
+        setMessage({ type: 'success', text: '文件上传成功，请等待处理...' });
       }
     } catch (error: any) {
       setMessage({ type: 'error', text: error.response?.data?.detail || '文件上传失败' });
@@ -233,7 +238,7 @@ const DocumentAnalysis: React.FC<DocumentAnalysisProps> = ({
               {uploadedFile ? uploadedFile.name : '点击选择文件或拖拽文件到这里'}
             </p>
             <p className="text-sm text-gray-500 mt-2">
-              支持 PDF 和 Word 文档，最大 10MB
+              支持 PDF 和 Word 文档，小文件直接上传，大文件(>10MB)自动分片上传
             </p>
           </div>
           
