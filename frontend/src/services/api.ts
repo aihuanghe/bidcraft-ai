@@ -129,14 +129,28 @@ export const chunkedUploadApi = {
     api.delete(`/api/upload/chunked/${uploadId}`),
 };
 
-// 智能上传：自动选择普通或分片上传
+// 智能上传：Word文档大文件使用分片上传，PDF直接上传
 export const smartUpload = {
   upload: async (
     file: File,
     onProgress?: (progress: number, uploaded: number, total: number) => void
   ): Promise<{ fileUrl?: string; fileContent?: string }> => {
-    // 小文件直接上传
-    if (file.size <= CHUNKED_THRESHOLD) {
+    const isWordDoc = file.name.match(/\.(docx|doc)$/i);
+    const isPdf = file.name.match(/\.pdf$/i);
+    
+    // PDF文件：直接上传（不支持分片）
+    if (isPdf) {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await api.post<any>('/api/document/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 300000, // PDF大文件增加超时时间
+      });
+      return { fileContent: response.data.file_content };
+    }
+    
+    // Word文档小文件：直接上传
+    if (isWordDoc && file.size <= CHUNKED_THRESHOLD) {
       const formData = new FormData();
       formData.append('file', file);
       const response = await api.post<any>('/api/document/upload', formData, {
@@ -144,8 +158,8 @@ export const smartUpload = {
       });
       return { fileContent: response.data.file_content };
     }
-
-    // 大文件分片上传
+    
+    // Word文档大文件(>10MB)：使用分片上传
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     
     // 初始化上传

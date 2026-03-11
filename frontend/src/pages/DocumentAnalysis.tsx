@@ -238,7 +238,7 @@ const DocumentAnalysis: React.FC<DocumentAnalysisProps> = ({
               {uploadedFile ? uploadedFile.name : '点击选择文件或拖拽文件到这里'}
             </p>
             <p className="text-sm text-gray-500 mt-2">
-              支持 PDF 和 Word 文档，小文件直接上传，大文件(>10MB)自动分片上传
+              支持 PDF 和 Word 文档，Word文档(>10MB)自动分片上传
             </p>
           </div>
           
