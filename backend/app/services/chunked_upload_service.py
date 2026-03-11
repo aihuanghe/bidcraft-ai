@@ -8,10 +8,9 @@ import aiofiles
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from pathlib import Path
+import shutil
 
 from ..config import settings
-from ..services.redis_service import redis_service
-from ..services.minio_service import minio_service
 
 
 class ChunkedUploadService:
@@ -23,10 +22,9 @@ class ChunkedUploadService:
     EXPIRE_HOURS = 24
     MAX_RETRIES = 3
     
-    # Redis key prefixes
-    UPLOAD_META_PREFIX = "upload:meta:"
-    UPLOAD_CHUNKS_PREFIX = "upload:chunks:"
-    FILE_HASH_PREFIX = "file:hash:"
+    # 本地存储路径
+    META_DIR = os.path.join(settings.upload_dir, "temp", "meta")
+    HASH_DIR = os.path.join(settings.upload_dir, "temp", "hash")
     
     @staticmethod
     def get_temp_dir(upload_id: str) -> str:
@@ -34,6 +32,56 @@ class ChunkedUploadService:
         temp_dir = os.path.join(settings.upload_dir, "temp", upload_id)
         os.makedirs(temp_dir, exist_ok=True)
         return temp_dir
+    
+    @staticmethod
+    def _get_meta_file(upload_id: str) -> str:
+        """获取元数据文件路径"""
+        os.makedirs(ChunkedUploadService.META_DIR, exist_ok=True)
+        return os.path.join(ChunkedUploadService.META_DIR, f"{upload_id}.json")
+    
+    @staticmethod
+    def _get_hash_file(file_hash: str) -> str:
+        """获取文件哈希记录文件路径"""
+        os.makedirs(ChunkedUploadService.HASH_DIR, exist_ok=True)
+        return os.path.join(ChunkedUploadService.HASH_DIR, f"{file_hash}.json")
+    
+    @staticmethod
+    def _save_meta(upload_id: str, meta_data: Dict):
+        """保存元数据到本地文件"""
+        meta_file = ChunkedUploadService._get_meta_file(upload_id)
+        with open(meta_file, 'w', encoding='utf-8') as f:
+            json.dump(meta_data, f, ensure_ascii=False)
+    
+    @staticmethod
+    def _load_meta(upload_id: str) -> Optional[Dict]:
+        """从本地文件加载元数据"""
+        meta_file = ChunkedUploadService._get_meta_file(upload_id)
+        if os.path.exists(meta_file):
+            with open(meta_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        return None
+    
+    @staticmethod
+    def _delete_meta(upload_id: str):
+        """删除元数据文件"""
+        meta_file = ChunkedUploadService._get_meta_file(upload_id)
+        if os.path.exists(meta_file):
+            os.remove(meta_file)
+    
+    @staticmethod
+    def _get_uploaded_chunks(upload_id: str) -> List[int]:
+        """获取已上传的分片列表"""
+        temp_dir = ChunkedUploadService.get_temp_dir(upload_id)
+        uploaded_chunks = []
+        if os.path.exists(temp_dir):
+            for f in os.listdir(temp_dir):
+                if f.startswith("part_"):
+                    try:
+                        part_num = int(f.split("_")[1])
+                        uploaded_chunks.append(part_num)
+                    except:
+                        pass
+        return sorted(uploaded_chunks)
     
     @staticmethod
     async def init_upload(
@@ -52,8 +100,7 @@ class ChunkedUploadService:
         # 计算总分片数
         total_chunks = (file_size + ChunkedUploadService.CHUNK_SIZE - 1) // ChunkedUploadService.CHUNK_SIZE
         
-        # 保存上传元数据到Redis
-        meta_key = f"{ChunkedUploadService.UPLOAD_META_PREFIX}{upload_id}"
+        # 保存上传元数据
         meta_data = {
             "upload_id": upload_id,
             "filename": filename,
@@ -67,11 +114,7 @@ class ChunkedUploadService:
             "expires_at": (datetime.utcnow() + timedelta(hours=ChunkedUploadService.EXPIRE_HOURS)).isoformat()
         }
         
-        await redis_service.set(meta_key, json.dumps(meta_data), ttl=ChunkedUploadService.EXPIRE_HOURS * 3600)
-        
-        # 初始化已上传分片集合
-        chunks_key = f"{ChunkedUploadService.UPLOAD_CHUNKS_PREFIX}{upload_id}"
-        await redis_service.client.delete(chunks_key) if redis_service.client else None
+        ChunkedUploadService._save_meta(upload_id, meta_data)
         
         return {
             "upload_id": upload_id,
@@ -89,13 +132,10 @@ class ChunkedUploadService:
     ) -> Dict[str, Any]:
         """上传分片"""
         # 获取上传元数据
-        meta_key = f"{ChunkedUploadService.UPLOAD_META_PREFIX}{upload_id}"
-        meta_json = await redis_service.get(meta_key)
+        meta_data = ChunkedUploadService._load_meta(upload_id)
         
-        if not meta_json:
+        if not meta_data:
             raise ValueError("上传会话不存在或已过期")
-        
-        meta_data = json.loads(meta_json)
         
         if meta_data["status"] != "init" and meta_data["status"] != "uploading":
             raise ValueError(f"上传状态异常: {meta_data['status']}")
@@ -107,14 +147,9 @@ class ChunkedUploadService:
         async with aiofiles.open(chunk_path, 'wb') as f:
             await f.write(chunk_data)
         
-        # 更新已上传分片列表
-        chunks_key = f"{ChunkedUploadService.UPLOAD_CHUNKS_PREFIX}{upload_id}"
-        if redis_service.client:
-            await redis_service.client.sadd(chunks_key, part_number)
-        
         # 更新上传状态
         meta_data["status"] = "uploading"
-        await redis_service.set(meta_key, json.dumps(meta_data), ttl=ChunkedUploadService.EXPIRE_HOURS * 3600)
+        ChunkedUploadService._save_meta(upload_id, meta_data)
         
         return {
             "upload_id": upload_id,
@@ -126,20 +161,13 @@ class ChunkedUploadService:
     @staticmethod
     async def get_upload_status(upload_id: str) -> Dict[str, Any]:
         """获取上传状态"""
-        meta_key = f"{ChunkedUploadService.UPLOAD_META_PREFIX}{upload_id}"
-        meta_json = await redis_service.get(meta_key)
+        meta_data = ChunkedUploadService._load_meta(upload_id)
         
-        if not meta_json:
+        if not meta_data:
             raise ValueError("上传会话不存在或已过期")
         
-        meta_data = json.loads(meta_json)
-        
         # 获取已上传的分片列表
-        chunks_key = f"{ChunkedUploadService.UPLOAD_CHUNKS_PREFIX}{upload_id}"
-        uploaded_chunks = []
-        if redis_service.client:
-            uploaded_chunks = list(await redis_service.client.smembers(chunks_key))
-            uploaded_chunks = [int(x) for x in uploaded_chunks]
+        uploaded_chunks = ChunkedUploadService._get_uploaded_chunks(upload_id)
         
         meta_data["uploaded_chunks"] = uploaded_chunks
         meta_data["uploaded_count"] = len(uploaded_chunks)
@@ -150,29 +178,13 @@ class ChunkedUploadService:
     async def complete_upload(upload_id: str) -> Dict[str, Any]:
         """完成分片上传"""
         # 获取上传元数据
-        meta_key = f"{ChunkedUploadService.UPLOAD_META_PREFIX}{upload_id}"
-        meta_json = await redis_service.get(meta_key)
+        meta_data = ChunkedUploadService._load_meta(upload_id)
         
-        if not meta_json:
+        if not meta_data:
             raise ValueError("上传会话不存在或已过期")
         
-        meta_data = json.loads(meta_json)
-        
         # 检查是否所有分片都已上传
-        chunks_key = f"{ChunkedUploadService.UPLOAD_CHUNKS_PREFIX}{upload_id}"
-        if redis_service.client:
-            uploaded_chunks = list(await redis_service.client.smembers(chunks_key))
-            uploaded_chunks = sorted([int(x) for x in uploaded_chunks])
-        else:
-            # Redis不可用时，从文件系统读取
-            temp_dir = ChunkedUploadService.get_temp_dir(upload_id)
-            uploaded_chunks = []
-            for f in os.listdir(temp_dir):
-                if f.startswith("part_"):
-                    part_num = int(f.split("_")[1])
-                    uploaded_chunks.append(part_num)
-            uploaded_chunks = sorted(uploaded_chunks)
-        
+        uploaded_chunks = ChunkedUploadService._get_uploaded_chunks(upload_id)
         expected_chunks = meta_data["total_chunks"]
         
         if len(uploaded_chunks) != expected_chunks:
@@ -188,13 +200,11 @@ class ChunkedUploadService:
         # 计算文件MD5
         file_hash = await ChunkedUploadService._calculate_md5(merged_path)
         
-        # 检查秒传
-        existing_file_key = f"{ChunkedUploadService.FILE_HASH_PREFIX}{file_hash}"
-        existing_file_info = await redis_service.get(existing_file_key)
-        
-        if existing_file_info:
-            # 秒传成功
-            file_info = json.loads(existing_file_info)
+        # 检查秒传 - 使用本地文件
+        hash_file = ChunkedUploadService._get_hash_file(file_hash)
+        if os.path.exists(hash_file):
+            with open(hash_file, 'r', encoding='utf-8') as f:
+                file_info = json.load(f)
             result = {
                 "upload_id": upload_id,
                 "file_url": file_info["file_url"],
@@ -204,48 +214,44 @@ class ChunkedUploadService:
                 "message": "秒传成功，文件已存在"
             }
         else:
-            # 上传到MinIO
+            # 尝试上传到MinIO
             try:
+                from ..services.minio_service import minio_service
                 object_name = f"documents/{datetime.now().strftime('%Y%m%d')}/{meta_data['filename']}"
                 file_url = await minio_service.upload_file(
                     file_path=merged_path,
                     object_name=object_name,
                     content_type=meta_data["content_type"]
                 )
-                
-                # 保存文件哈希用于秒传
-                file_info = {
-                    "file_hash": file_hash,
-                    "file_url": file_url,
-                    "file_size": meta_data["file_size"],
-                    "filename": meta_data["filename"],
-                    "created_at": datetime.utcnow().isoformat()
-                }
-                await redis_service.set(existing_file_key, json.dumps(file_info), ttl=None)
-                
-                result = {
-                    "upload_id": upload_id,
-                    "file_url": file_url,
-                    "file_size": meta_data["file_size"],
-                    "file_hash": file_hash,
-                    "skip_upload": False,
-                    "message": "文件上传成功"
-                }
             except Exception as e:
-                # MinIO上传失败，使用本地文件
-                result = {
-                    "upload_id": upload_id,
-                    "file_url": merged_path,
-                    "file_size": meta_data["file_size"],
-                    "file_hash": file_hash,
-                    "skip_upload": False,
-                    "message": f"文件上传成功（本地存储）: {str(e)}"
-                }
+                # MinIO不可用，使用本地文件路径
+                file_url = merged_path
+                print(f"MinIO上传失败，使用本地存储: {e}")
+            
+            # 保存文件哈希用于秒传
+            file_info = {
+                "file_hash": file_hash,
+                "file_url": file_url,
+                "file_size": meta_data["file_size"],
+                "filename": meta_data["filename"],
+                "created_at": datetime.utcnow().isoformat()
+            }
+            with open(hash_file, 'w', encoding='utf-8') as f:
+                json.dump(file_info, f)
+            
+            result = {
+                "upload_id": upload_id,
+                "file_url": file_url,
+                "file_size": meta_data["file_size"],
+                "file_hash": file_hash,
+                "skip_upload": False,
+                "message": "文件上传成功"
+            }
         
         # 更新上传状态
         meta_data["status"] = "completed"
         meta_data["completed_at"] = datetime.utcnow().isoformat()
-        await redis_service.set(meta_key, json.dumps(meta_data), ttl=3600)  # 保留1小时
+        ChunkedUploadService._save_meta(upload_id, meta_data)
         
         # 清理临时分片文件
         await ChunkedUploadService._cleanup_chunks(temp_dir, uploaded_chunks)
@@ -296,18 +302,12 @@ class ChunkedUploadService:
     @staticmethod
     async def cancel_upload(upload_id: str):
         """取消上传"""
-        meta_key = f"{ChunkedUploadService.UPLOAD_META_PREFIX}{upload_id}"
-        chunks_key = f"{ChunkedUploadService.UPLOAD_CHUNKS_PREFIX}{upload_id}"
-        
-        # 删除Redis记录
-        await redis_service.delete(meta_key)
-        if redis_service.client:
-            await redis_service.client.delete(chunks_key)
+        # 删除元数据
+        ChunkedUploadService._delete_meta(upload_id)
         
         # 清理临时文件
         temp_dir = ChunkedUploadService.get_temp_dir(upload_id)
         if os.path.exists(temp_dir):
-            import shutil
             shutil.rmtree(temp_dir, ignore_errors=True)
     
     @staticmethod
