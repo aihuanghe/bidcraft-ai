@@ -319,7 +319,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='yibiao-simple',
+    name='BidCraft-AI',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -360,7 +360,7 @@ def build_exe():
     
     # 构建exe - 使用更详细的参数，增加进程管理相关导入
     pyinstaller_cmd = (
-        "pyinstaller --onefile --name=\"yibiao-simple\" "
+        "pyinstaller --onefile --name=\"BidCraft-AI\" "
         "--add-data=\"backend;backend\" "
         "--hidden-import=uvicorn --hidden-import=uvicorn.logging --hidden-import=uvicorn.loops "
         "--hidden-import=uvicorn.loops.auto --hidden-import=uvicorn.protocols "

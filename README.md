@@ -42,7 +42,7 @@
 ### 方式一：运行exe（Windows）
 
 1. 从 [GitHub Releases](https://github.com/aihuanghe/bidcraft-ai/releases) 下载最新版本的exe文件
-2. 双击 `yibiao-simple.exe` 启动应用
+2. 双击 `BidCraft-AI.exe` 启动应用
 3. 访问 http://localhost:8000
 
 ### 方式二：开发模式
@@ -215,7 +215,7 @@ docker-compose down
 python build.py
 ```
 
-构建完成后，exe文件位于 `dist/yibiao-simple.exe`
+构建完成后，exe文件位于 `dist/BidCraft-AI.exe`
 
 ## 🤝 贡献指南
 
