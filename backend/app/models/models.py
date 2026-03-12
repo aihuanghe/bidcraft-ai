@@ -21,6 +21,11 @@ class TenderDocument(Base):
     project_overview = Column(Text)  # 项目概述
     technical_requirements = Column(Text)  # 技术评分要求
     
+    # 模板提取信息
+    has_format_template = Column(Boolean, default=False)  # 是否检测到投标文件格式章节
+    format_template_chapter = Column(String(100))  # 格式章节位置，如"第8章"
+    extracted_template_id = Column(Integer, ForeignKey("extracted_templates.id"), nullable=True)
+    
     # 元数据
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -51,6 +56,13 @@ class BidProject(Base):
     # 状态
     status = Column(String(50), default="draft")  # draft, in_progress, submitted, won, lost
     progress = Column(Integer, default=0)  # 完成进度 0-100
+    
+    # 模板关联
+    template_id = Column(Integer, ForeignKey("extracted_templates.id"), nullable=True)
+    template_source = Column(String(20))  # extracted, builtin, custom
+    
+    # 基于模板生成的大纲
+    outline_json = Column(JSON)
     
     # 元数据
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -210,7 +222,7 @@ class AppConfig(Base):
     """应用配置模型"""
     __tablename__ = "app_configs"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     config_key = Column(String(100), unique=True, index=True, nullable=False)
     config_value = Column(Text)
     config_type = Column(String(50))  # string, json, int, float, bool
@@ -218,3 +230,81 @@ class AppConfig(Base):
     # 元数据
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ExtractedTemplate(Base):
+    """提取的招标文件模板模型"""
+    __tablename__ = "extracted_templates"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    source_doc_id = Column(Integer, ForeignKey("tender_documents.id"), nullable=True)
+    
+    # 模板类型：extracted（提取）vs builtin（内置）vs custom（自定义）
+    template_type = Column(String(20), default="extracted")
+    
+    # 模板名称和描述
+    name = Column(String(500))
+    description = Column(Text)
+    
+    # 行业类型
+    industry = Column(String(100))  # engineering, it, medical, government等
+    
+    # 章节树结构（JSON格式）
+    structure_json = Column(JSON)
+    
+    # 样式规则（字体、段落、页面格式）
+    style_rules = Column(JSON)
+    
+    # 原文关键段落备份
+    original_snippets = Column(JSON)
+    
+    # 提取置信度（0-1）
+    confidence_score = Column(Float, default=0.0)
+    
+    # 状态
+    is_active = Column(Boolean, default=True)
+    
+    # 元数据
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # 关联 - 明确指定外键
+    source_document = relationship(
+        "TenderDocument", 
+        backref="extracted_templates",
+        foreign_keys=[source_doc_id]
+    )
+
+
+class TemplateDeviation(Base):
+    """偏离表映射模型"""
+    __tablename__ = "template_deviations"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    bid_project_id = Column(Integer, ForeignKey("bid_projects.id"), nullable=False)
+    
+    # 偏离表类型
+    deviation_type = Column(String(50))  # technical, business
+    
+    # 招标要求
+    tender_requirement = Column(Text)
+    
+    # 投标响应
+    bid_response = Column(Text)
+    
+    # 偏离类型：none（无偏离）, positive（正偏离）, negative（负偏离）
+    deviation_status = Column(String(20), default="none")
+    
+    # 关联章节号
+    chapter_path = Column(String(100))
+    chapter_title = Column(String(500))
+    
+    # 人工确认状态
+    is_confirmed = Column(Boolean, default=False)
+    
+    # 元数据
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # 关联
+    project = relationship("BidProject", backref="deviations")

@@ -57,6 +57,20 @@ export interface ChapterContentRequest {
   project_overview: string;
 }
 
+export interface TemplateRecommendation {
+  templates: Array<{
+    id: number;
+    name: string;
+    type: string;
+    score: number;
+    reasons: string[];
+    recommendation: string;
+  }>;
+  recommended_template_id?: number;
+  confidence: number;
+  industry: string;
+}
+
 // 分片上传配置
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
 const CHUNKED_THRESHOLD = 10 * 1024 * 1024; // 10MB
@@ -262,6 +276,67 @@ export const expandApi = {
       timeout: 300000,
     });
   },
+};
+
+// 模板相关API
+export const templateApi = {
+  extractTemplate: (documentId: number) =>
+    api.post('/api/templates/extract', { document_id: documentId }),
+
+  getTemplateRecommendation: (documentId: number) =>
+    api.get<TemplateRecommendation>(`/api/templates/document/${documentId}/recommendation`),
+
+  selectTemplate: (projectId: number, templateId: number, templateSource: string) =>
+    api.post('/api/templates/select', {
+      project_id: projectId,
+      template_id: templateId,
+      template_source: templateSource
+    }),
+
+  generateOutline: (projectId: number, templateId: number, technicalScores: any, projectOverview: string) =>
+    api.post('/api/templates/outline/generate', {
+      project_id: projectId,
+      template_id: templateId,
+      technical_scores: technicalScores,
+      project_overview: projectOverview
+    }),
+
+  generateContent: (projectId: number, chapter: any, projectInfo: any, enterpriseData?: any, similarCases?: any[]) =>
+    api.post('/api/templates/content/generate', {
+      project_id: projectId,
+      chapter,
+      project_info: projectInfo,
+      enterprise_data: enterpriseData,
+      similar_cases: similarCases
+    }),
+
+  generateContentStream: (projectId: number, chapter: any, projectInfo: any, enterpriseData?: any, similarCases?: any[]) =>
+    fetch(`${API_BASE_URL}/api/templates/content/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        project_id: projectId,
+        chapter,
+        project_info: projectInfo,
+        enterprise_data: enterpriseData,
+        similar_cases: similarCases
+      }),
+    }),
+
+  generateDeviationTable: (projectId: number, technicalScores: any) =>
+    api.post(`/api/templates/deviation/generate?project_id=${projectId}`, technicalScores),
+
+  saveDeviationMappings: (projectId: number, mappings: any[]) =>
+    api.post('/api/templates/deviation/mappings', {
+      project_id: projectId,
+      mappings
+    }),
+
+  getDeviationTable: (projectId: number) =>
+    api.get(`/api/templates/deviation/${projectId}`),
+
+  exportDocument: (projectId: number, format: 'docx' | 'pdf' = 'docx') =>
+    api.get(`/api/templates/export/${projectId}?format=${format}`),
 };
 
 export default api;
