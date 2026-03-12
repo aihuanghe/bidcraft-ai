@@ -16,11 +16,32 @@
 - **📄 智能文档解析**：自动分析招标文件（PDF/Word），提取项目概述和技术评分要求
 - **📋 AI生成目录**：基于招标文件智能生成专业的三级标书目录结构
 - **✍️ 内容自动生成**：为每个章节自动生成高质量、针对性的标书内容
+- **🤖 大模型统一接入**：支持 OpenAI、Kimi、DeepSeek 多Provider，智能路由 + 故障转移
+- **📊 企业数据管理**：占位符系统 + RAG智能检索 + 多源企业素材库
 - **📦 大文件分片上传**：支持超过10MB的大文件自动分片上传（5MB/片），支持断点续传
 - **💾 云端存储支持**：集成MinIO对象存储，支持大文件管理
 - **🔍 向量语义检索**：集成Qdrant向量数据库，支持标书内容语义搜索
 - **⚡ Redis缓存加速**：智能缓存机制，提升响应速度
 - **📤 一键导出**：导出Word文档，自由编辑
+
+## 📊 企业数据管理
+
+系统提供完整的企业数据管理能力，支持多种素材类型和智能填充：
+
+### 核心功能
+- **占位符系统**：自动识别标书模板中的占位符，支持手动填充和RAG自动填充
+- **RAG智能检索**：基于Qdrant向量数据库，实现语义级别的素材搜索
+- **多源企业素材库**：支持案例、证书、资质、方案等多种素材类型
+- **素材类型**：成功案例、产品证书、施工资质、技术方案、业绩证明等
+
+### 占位符类型
+| 类型 | 说明 |
+|------|------|
+| manual | 手动输入 |
+| rag | RAG自动检索填充 |
+| erp | ERP系统数据 |
+| hr | 人员资质数据 |
+| finance | 财务数据 |
 
 ## 🌟 产品优势
 
@@ -107,7 +128,7 @@ docker-compose up -d redis minio qdrant
 | 缓存/队列 | Redis |
 | 对象存储 | MinIO |
 | 向量检索 | Qdrant |
-| AI集成 | OpenAI SDK |
+| AI集成 | OpenAI SDK + Kimi + DeepSeek |
 
 ### 项目结构
 
@@ -123,11 +144,19 @@ bidcraft-ai/
 │   │   │   ├── outline.py    # 目录生成
 │   │   │   ├── content.py    # 内容生成
 │   │   │   ├── projects.py   # 项目管理
-│   │   │   ├── materials.py   # 企业资料
+│   │   │   ├── materials.py  # 企业资料
 │   │   │   ├── storage.py    # 文件存储
-│   │   │   └── upload.py     # 分片上传
+│   │   │   ├── upload.py     # 分片上传
+│   │   │   ├── template.py   # 模板管理
+│   │   │   ├── enterprise.py # 企业数据管理
+│   │   │   └── llm.py       # 大模型管理
 │   │   ├── services/         # 业务服务
 │   │   │   ├── openai_service.py
+│   │   │   ├── llm_provider.py    # LLM Provider抽象
+│   │   │   ├── llm_router.py     # LLM路由服务
+│   │   │   ├── placeholder_service.py  # 占位符服务
+│   │   │   ├── rag_service.py    # RAG检索服务
+│   │   │   ├── enterprise_data_provider.py  # 企业数据源
 │   │   │   ├── file_service.py
 │   │   │   ├── redis_service.py
 │   │   │   ├── minio_service.py
@@ -140,6 +169,8 @@ bidcraft-ai/
 ├── frontend/                 # 前端应用
 │   ├── src/
 │   │   ├── components/       # 可复用组件
+│   │   │   ├── ConfigPanel.tsx
+│   │   │   └── ModelConfigPanel.tsx  # 模型配置
 │   │   ├── pages/           # 页面组件
 │   │   ├── services/        # API服务
 │   │   └── hooks/          # React Hooks
@@ -170,6 +201,21 @@ bidcraft-ai/
 | `POST /api/document/export-word` | 导出Word文档 |
 | `GET /api/projects/` | 获取项目列表 |
 | `GET /api/materials/` | 获取企业资料列表 |
+| **企业数据管理** | |
+| `GET /api/enterprise/projects/{id}/placeholders` | 获取项目占位符 |
+| `POST /api/enterprise/projects/{id}/placeholders/{pid}/fill` | 填充占位符 |
+| `POST /api/enterprise/projects/{id}/placeholders/{pid}/auto-fill` | RAG自动填充 |
+| `POST /api/enterprise/materials/search` | RAG语义检索 |
+| `POST /api/enterprise/materials/upload` | 上传企业素材 |
+| `GET /api/enterprise/materials/types` | 获取素材类型 |
+| **大模型管理** | |
+| `GET /api/llm/providers` | 获取可用Provider列表 |
+| `POST /api/llm/chat` | 通用聊天接口 |
+| `POST /api/llm/chat/stream` | 流式聊天接口 |
+| `GET /api/llm/usage` | Token消耗统计 |
+| `POST /api/llm/config/providers` | 更新Provider配置 |
+| `POST /api/llm/providers/test` | 测试Provider连接 |
+| `GET /api/llm/routing` | 获取路由配置 |
 
 ## 🐳 Docker部署
 

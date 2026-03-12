@@ -25,6 +25,20 @@ export interface ConfigData {
   model_name: string;
 }
 
+export interface ProviderConfig {
+  api_key: string;
+  base_url?: string;
+  model_name: string;
+  enabled: boolean;
+  fallback?: string[];
+}
+
+export interface LLMConfig {
+  providers: Record<string, ProviderConfig>;
+  default_provider?: string;
+  failover_enabled: boolean;
+}
+
 export interface FileUploadResponse {
   success: boolean;
   message: string;
@@ -337,6 +351,44 @@ export const templateApi = {
 
   exportDocument: (projectId: number, format: 'docx' | 'pdf' = 'docx') =>
     api.get(`/api/templates/export/${projectId}?format=${format}`),
+};
+
+// LLM统一接入层API
+export const llmApi = {
+  // 获取Provider列表
+  getProviders: () => api.get('/api/llm/providers'),
+  
+  // 获取路由配置
+  getRouting: () => api.get('/api/llm/routing'),
+  
+  // 获取使用统计
+  getUsage: (days: number = 30) => api.get(`/api/llm/usage?days=${days}`),
+  
+  // 更新Provider配置
+  updateProviderConfig: (config: LLMConfig) => api.post('/api/llm/config/providers', config),
+  
+  // 测试Provider连接
+  testProvider: (providerType: string, apiKey: string, baseUrl: string, modelName: string) =>
+    api.post('/api/llm/providers/test', {
+      provider_type: providerType,
+      api_key: apiKey,
+      base_url: baseUrl,
+      model_name: modelName
+    }),
+  
+  // 获取Provider支持的模型
+  getModels: (providerType: string) => api.get(`/api/llm/models/${providerType}`),
+  
+  // 选择Provider
+  selectProvider: (providerType: string) => api.post(`/api/llm/router/select?provider_type=${providerType}`),
+  
+  // 通用聊天
+  chat: (messages: any[], taskType: string = 'general', providerType?: string) =>
+    api.post('/api/llm/chat', {
+      messages,
+      task_type: taskType,
+      provider_type: providerType
+    }),
 };
 
 export default api;
