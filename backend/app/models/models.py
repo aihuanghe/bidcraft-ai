@@ -64,6 +64,9 @@ class BidProject(Base):
     # 基于模板生成的大纲
     outline_json = Column(JSON)
     
+    # 占位符填充值
+    placeholder_values = Column(JSON)
+    
     # 元数据
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -82,22 +85,39 @@ class EnterpriseMaterial(Base):
     id = Column(Integer, primary_key=True, index=True)
     bid_project_id = Column(Integer, ForeignKey("bid_projects.id"), nullable=True)
     
-    # 资料类型
-    material_type = Column(String(100))  # business_license, certificate, qualification, etc.
+    # 资料类型：qualification(资质)/project(业绩)/personnel(人员)/finance(财务)/product(产品)/document(文档)
+    material_type = Column(String(100))
     
     # 资料信息
-    name = Column(String(500), nullable=False)  # 资料名称
-    description = Column(Text)  # 资料描述
+    name = Column(String(500), nullable=False)
+    description = Column(Text)
+    
+    # 扩展字段（用于RAG检索）
+    content_text = Column(Text)  # 提取的文本内容
+    chunks_json = Column(JSON)  # 分块后的文本块
+    
+    # 向量ID（存储在Qdrant）
+    vector_ids = Column(JSON)  # 向量ID列表
     
     # 文件存储
-    file_path = Column(String(1000))  # 本地路径
-    minio_object_name = Column(String(1000))  # MinIO对象名
-    file_url = Column(String(2000))  # 文件访问URL
+    file_path = Column(String(1000))
+    minio_object_name = Column(String(1000))
+    file_url = Column(String(2000))
+    file_type = Column(String(50))  # pdf, docx, xlsx
     
-    # 过期信息
-    issue_date = Column(DateTime)  # 发证日期
-    expiry_date = Column(DateTime)  # 过期日期
+    # 资质特有字段
+    issue_date = Column(DateTime)
+    expiry_date = Column(DateTime)
     is_expired = Column(Boolean, default=False)
+    
+    # 业绩特有字段
+    contract_amount = Column(Float)  # 合同金额
+    completion_date = Column(DateTime)  # 完成日期
+    client_name = Column(String(500))  # 客户名称
+    
+    # 产品特有字段
+    model_number = Column(String(200))  # 型号
+    technical_params = Column(JSON)  # 技术参数
     
     # 元数据
     created_at = Column(DateTime, default=datetime.utcnow)
