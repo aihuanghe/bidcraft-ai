@@ -391,4 +391,54 @@ export const llmApi = {
     }),
 };
 
+// 企业数据管理API
+export const enterpriseApi = {
+  // 获取项目占位符
+  getProjectPlaceholders: (projectId: number, templateStructure?: string) => 
+    api.get(`/api/enterprise/projects/${projectId}/placeholders`, {
+      params: templateStructure ? { template_structure: templateStructure } : {}
+    }),
+  
+  // 填充占位符
+  fillPlaceholder: (projectId: number, placeholderId: string, value: any, mode: string = 'manual') =>
+    api.post(`/api/enterprise/projects/${projectId}/placeholders/${placeholderId}/fill`, {
+      value,
+      mode
+    }),
+  
+  // RAG自动填充
+  autoFillPlaceholder: (projectId: number, placeholderId: string, query: string, topK: number = 3) =>
+    api.post(`/api/enterprise/projects/${projectId}/placeholders/${placeholderId}/auto-fill`, {
+      query,
+      top_k: topK
+    }),
+  
+  // 获取占位符值
+  getPlaceholderValues: (projectId: number) =>
+    api.get(`/api/enterprise/projects/${projectId}/placeholder-values`),
+  
+  // RAG检索
+  searchMaterials: (query: string, materialType?: string, filters?: any, topK: number = 5) =>
+    api.post('/api/enterprise/materials/search', {
+      query,
+      material_type: materialType,
+      filters,
+      top_k: topK
+    }),
+  
+  // 获取素材列表
+  getMaterials: (params?: any) =>
+    api.get('/api/enterprise/materials/', { params }),
+  
+  // 上传素材
+  uploadMaterial: (formData: FormData) =>
+    api.post('/api/enterprise/materials/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }),
+  
+  // 获取素材类型
+  getMaterialTypes: () =>
+    api.get('/api/enterprise/materials/types'),
+};
+
 export default api;

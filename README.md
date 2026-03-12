@@ -22,7 +22,7 @@
 - **💾 云端存储支持**：集成MinIO对象存储，支持大文件管理
 - **🔍 向量语义检索**：集成Qdrant向量数据库，支持标书内容语义搜索
 - **⚡ Redis缓存加速**：智能缓存机制，提升响应速度
-- **📤 一键导出**：导出Word文档，自由编辑
+- **📤 一键导出**：导出Word/PDF文档，自由编辑
 
 ## 📊 企业数据管理
 
@@ -42,6 +42,40 @@
 | erp | ERP系统数据 |
 | hr | 人员资质数据 |
 | finance | 财务数据 |
+
+## 📱 页面介绍
+
+系统采用多页面设计，完整覆盖标书制作全流程：
+
+### 1. 首页（三步流程）
+- 招标文件上传（支持分片上传和进度显示）
+- 文档分析（提取项目概述和技术评分要求）
+- 目录编辑（AI智能生成三级目录）
+- 正文编辑（章节内容生成和编辑）
+
+### 2. 标书工作台（核心）
+- **三栏布局**：
+  - 左侧：大纲树（拖拽排序、章节增删改）
+  - 中间：富文本编辑器（支持Word格式粘贴）
+  - 右侧：占位符填充面板（手动/RAG模式切换）
+- **顶部工具栏**：AI生成按钮、模板切换、导出Word
+- **底部状态栏**：生成进度条、Token消耗统计
+
+### 3. 企业素材库
+- 素材分类标签页（资质/业绩/人员/财务/产品）
+- 批量上传组件（支持解析进度显示）
+- 语义检索界面（关键词搜索、筛选条件）
+- 素材详情弹窗（预览、编辑元数据）
+
+### 4. 模板管理
+- 模板列表展示（内置/自定义/提取）
+- 模板创建、编辑、删除
+- 偏离表编辑功能
+- 模板导出
+
+### 5. 系统设置
+- 基本配置（API Key、模型选择）
+- **模型配置**（多Provider统一管理）
 
 ## 🌟 产品优势
 
@@ -122,7 +156,9 @@ docker-compose up -d redis minio qdrant
 
 | 层级 | 技术栈 |
 |------|--------|
-| 前端 | React 18 + TypeScript + Tailwind CSS |
+| 前端 | React 18 + TypeScript + Tailwind CSS + React Router |
+| 前端组件 | @hello-pangea/dnd (拖拽) + React-Quill (富文本) + Heroicons |
+| 后端 | FastAPI + Python 3.11 |
 | 后端 | FastAPI + Python 3.11 |
 | 数据库 | SQLite + SQLAlchemy |
 | 缓存/队列 | Redis |
@@ -170,10 +206,20 @@ bidcraft-ai/
 │   ├── src/
 │   │   ├── components/       # 可复用组件
 │   │   │   ├── ConfigPanel.tsx
-│   │   │   └── ModelConfigPanel.tsx  # 模型配置
+│   │   │   ├── ModelConfigPanel.tsx  # 模型配置
+│   │   │   ├── PlaceholderPanel.tsx  # 占位符面板
+│   │   │   ├── TemplateSelectPanel.tsx  # 模板选择
+│   │   │   └── DeviationEditModal.tsx  # 偏离表编辑
 │   │   ├── pages/           # 页面组件
+│   │   │   ├── DocumentAnalysis.tsx  # 文档分析
+│   │   │   ├── OutlineEdit.tsx      # 目录编辑
+│   │   │   ├── ContentEdit.tsx      # 内容编辑
+│   │   │   ├── Dashboard.tsx       # 标书工作台
+│   │   │   ├── Materials.tsx        # 企业素材库
+│   │   │   └── Templates.tsx       # 模板管理
 │   │   ├── services/        # API服务
-│   │   └── hooks/          # React Hooks
+│   │   ├── hooks/          # React Hooks
+│   │   └── types/          # TypeScript类型定义
 │   └── package.json
 ├── docker-compose.yml        # Docker编排
 ├── Dockerfile               # 后端容器镜像
@@ -216,6 +262,20 @@ bidcraft-ai/
 | `POST /api/llm/config/providers` | 更新Provider配置 |
 | `POST /api/llm/providers/test` | 测试Provider连接 |
 | `GET /api/llm/routing` | 获取路由配置 |
+| **模板管理** | |
+| `GET /api/templates/` | 获取模板列表 |
+| `POST /api/templates/` | 创建模板 |
+| `GET /api/templates/{id}` | 获取模板详情 |
+| `DELETE /api/templates/{id}` | 删除模板 |
+
+## 🧭 前端路由
+
+| 路由 | 页面 |
+|------|------|
+| `/` | 首页（三步流程） |
+| `/dashboard` | 标书工作台 |
+| `/materials` | 企业素材库 |
+| `/templates` | 模板管理 |
 
 ## 🐳 Docker部署
 
@@ -254,10 +314,25 @@ docker-compose logs -f
 docker-compose down
 ```
 
-## 🔧 生产环境打包
+## 🚀 前端构建
 
+### 开发模式
 ```bash
-# 一键构建exe
+cd frontend
+npm install  # 首次安装依赖
+npm start   # 启动开发服务器
+```
+访问 http://localhost:3000
+
+### 生产构建
+```bash
+cd frontend
+npm run build
+```
+构建产物输出到 `frontend/build/`
+
+### 一键构建exe
+```bash
 python build.py
 ```
 

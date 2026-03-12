@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { templateApi } from '../services/api';
 import { 
-  DocumentTemplateIcon, 
+  DocumentTextIcon, 
   CheckCircleIcon, 
   ExclamationCircleIcon,
   ChevronRightIcon,
@@ -60,7 +60,9 @@ const TemplateSelectPanel: React.FC<TemplateSelectPanelProps> = ({
       const data = response.data;
       
       setTemplates(data.templates);
-      setRecommendedId(data.recommended_template_id);
+      if (data.recommended_template_id) {
+        setRecommendedId(data.recommended_template_id);
+      }
       setConfidence(data.confidence);
       setIndustry(data.industry);
       
@@ -230,7 +232,7 @@ const TemplateSelectPanel: React.FC<TemplateSelectPanelProps> = ({
                     
                     <div>
                       <div className="flex items-center gap-2">
-                        <DocumentTemplateIcon className="w-5 h-5 text-gray-400" />
+                        <DocumentTextIcon className="w-5 h-5 text-gray-400" />
                         <span className="font-medium text-gray-900">{template.name}</span>
                         <span className="text-xs text-gray-500">
                           ({template.type === 'extracted' ? '提取模板' : 
